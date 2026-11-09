@@ -1,0 +1,6 @@
+name: draft-from-spec
+description: >
+  The user hands over a small spec and asks for tickets. A good run writes a
+  valid board file with vertical slices, explicit blocked-by order, expand and
+  contract for the column rename, checkable acceptance criteria, renders the
+  review page, and does not touch GitHub.

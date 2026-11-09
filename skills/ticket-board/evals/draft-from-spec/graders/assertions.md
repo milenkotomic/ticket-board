@@ -1,0 +1,9 @@
+- A tickets.json file is written next to the spec and `board.py check` passes on it
+- The column rename is split into an expand ticket, one migrate ticket per client (web, iOS, nightly export), and a contract ticket blocked by every migrate ticket
+- No ticket is a pure layer (for example "create the table" separate from the endpoint that uses it)
+- At least two tickets have no blockers, so work can start in parallel
+- Every acceptance criterion names an observable result (a status code, an ordering, a page size, a visible change)
+- Nothing from the spec's out-of-scope list becomes a ticket
+- Ticket text is in Spanish, matching the user, and uses no voseo
+- The review page is rendered with `board.py render`
+- No `gh` command runs and nothing is created on GitHub

@@ -1,0 +1,16 @@
+{
+  "name": "ticket-board",
+  "version": "0.1.0",
+  "description": "Slice a spec into reviewable tickets, review them on a styled HTML board, and publish and sync them as GitHub issues on a GitHub Project in a few batched requests.",
+  "author": {
+    "name": "Milenko Tomic",
+    "url": "https://github.com/milenkotomic"
+  },
+  "homepage": "https://github.com/milenkotomic/ticket-board",
+  "repository": "https://github.com/milenkotomic/ticket-board",
+  "license": "MIT",
+  "keywords": ["tickets", "issues", "planning", "github-projects", "backlog"],
+  "experimental": {
+    "evals": "skills/ticket-board/evals"
+  }
+}

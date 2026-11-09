@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+/* Tokens. Swap these to restyle; fonts fall back to system ones when Geist and JetBrains Mono are not installed. */
+:root {
+  --cobalt: #1B4DCC; --azure: #5B8DEF; --azure-soft: #C9D8FA;
+  --ink: #0A1530; --ink-2: #2A3454; --ink-3: #58607A;
+  --paper: #F4F5F8; --paper-2: #ECEEF3; --white: #FFFFFF;
+  --wire: #D4D9E4; --wire-strong: #B7BFD0;
+  --font-sans: "Geist", "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-sm: 4px; --radius-md: 8px;
+}
+:root {
+  --bg: var(--paper); --bg-elev: var(--white); --bg-alt: var(--paper-2);
+  --fg: var(--ink); --fg-muted: var(--ink-2); --fg-subtle: var(--ink-3);
+  --accent: var(--cobalt); --border: var(--wire); --border-strong: var(--wire-strong);
+  --pre-bg: var(--ink); --pre-fg: var(--paper); --kw: #8FB0F5; --str: #8FE8CF;
+  --ok-bg: rgba(16, 163, 127, 0.12); --ok-fg: #0B7A60;
+  --warn-bg: rgba(224, 161, 6, 0.18); --warn-fg: #8C6500;
+  --bad-bg: rgba(209, 72, 54, 0.12); --bad-fg: #A03325;
+  --info-bg: rgba(27, 77, 204, 0.10); --info-fg: var(--cobalt);
+  --neutral-bg: var(--paper-2); --neutral-fg: var(--ink-3);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: var(--ink); --bg-elev: #111D3E; --bg-alt: #16234A;
+  --fg: var(--paper); --fg-muted: #C3CADB; --fg-subtle: #8A94B0;
+  --accent: var(--azure); --border: #243359; --border-strong: #35466F;
+  --pre-bg: #060D22;
+  --ok-bg: rgba(16, 163, 127, 0.18); --ok-fg: #8FE8CF;
+  --warn-bg: rgba(224, 161, 6, 0.22); --warn-fg: #F2CF6B;
+  --bad-bg: rgba(209, 72, 54, 0.22); --bad-fg: #F7B0A6;
+  --info-bg: rgba(91, 141, 239, 0.18); --info-fg: #9DBBF7;
+  --neutral-bg: #1C2A55; --neutral-fg: #A9B3CC;
+} }
+:root[data-theme="dark"] {
+  --bg: var(--ink); --bg-elev: #111D3E; --bg-alt: #16234A;
+  --fg: var(--paper); --fg-muted: #C3CADB; --fg-subtle: #8A94B0;
+  --accent: var(--azure); --border: #243359; --border-strong: #35466F;
+  --pre-bg: #060D22;
+  --ok-bg: rgba(16, 163, 127, 0.18); --ok-fg: #8FE8CF;
+  --warn-bg: rgba(224, 161, 6, 0.22); --warn-fg: #F2CF6B;
+  --bad-bg: rgba(209, 72, 54, 0.22); --bad-fg: #F7B0A6;
+  --info-bg: rgba(91, 141, 239, 0.18); --info-fg: #9DBBF7;
+  --neutral-bg: #1C2A55; --neutral-fg: #A9B3CC;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; color: var(--fg); background: var(--bg); font: 400 16px/1.55 var(--font-sans); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--font-mono); font-size: 0.88em; background: var(--bg-alt); padding: 1px 4px; border-radius: var(--radius-sm); }
+.strip { font: 500 12px/1 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--fg-subtle);
+  border-bottom: 1px solid var(--border); padding: 10px 24px; background: var(--bg-elev); display: flex; gap: 16px; flex-wrap: wrap; }
+.strip b { color: var(--accent); font-weight: 600; }
+main { max-width: 980px; margin: 0 auto; padding: 32px 24px 120px; }
+h1 { font-size: 2em; font-weight: 600; line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 8px; text-wrap: balance; }
+.sub { color: var(--fg-muted); margin: 0 0 20px; font-size: 0.95em; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.filters { display: grid; gap: 8px; margin-bottom: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-elev); }
+.frow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.frow > span { font: 500 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-subtle); min-width: 64px; }
+.chip { font: 500 12.5px/1 var(--font-sans); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--fg-muted); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--white); }
+h2 { font-size: 1.25em; font-weight: 600; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+h2 .count { font: 500 0.7em var(--font-mono); color: var(--fg-subtle); }
+.card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px 18px; margin: 0 0 12px; scroll-margin-top: 16px; }
+.card:target { border-color: var(--accent); }
+.card.rev-ok { border-left: 3px solid var(--ok-fg); }
+.card.rev-chg { border-left: 3px solid var(--warn-fg); }
+.card header { display: flex; gap: 12px; align-items: baseline; }
+.num { font: 600 13px/1 var(--font-mono); color: var(--fg-subtle); min-width: 1.8em; }
+h3 { font-size: 1.05em; font-weight: 600; margin: 0; line-height: 1.35; }
+h4 { font: 600 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-subtle); margin: 14px 0 6px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 0 calc(1.8em + 12px); }
+.meta, .body, .review { margin-left: calc(1.8em + 12px); }
+.pill { font: 500 11.5px/1 var(--font-mono); padding: 4px 7px; border-radius: var(--radius-sm); background: var(--neutral-bg); color: var(--neutral-fg); }
+a.pill { color: var(--info-fg); background: var(--info-bg); }
+.st-done { background: var(--ok-bg); color: var(--ok-fg); }
+.st-in-progress { background: var(--info-bg); color: var(--info-fg); }
+.st-draft { background: var(--warn-bg); color: var(--warn-fg); }
+.ready { background: var(--ok-bg); color: var(--ok-fg); }
+.meta { font-size: 0.85em; color: var(--fg-subtle); margin-top: 8px; }
+.dep { font-family: var(--font-mono); }
+.dep.ok { text-decoration: line-through; }
+.body { color: var(--fg-muted); font-size: 0.95em; }
+.body p { margin: 10px 0 0; max-width: 78ch; }
+.body ul { margin: 6px 0 0; padding-left: 20px; }
+.body li { margin: 3px 0; max-width: 76ch; }
+pre.gherkin { font: 13px/1.55 var(--font-mono); background: var(--pre-bg); color: var(--pre-fg); padding: 12px 14px; border-radius: var(--radius-md); overflow-x: auto; margin: 12px 0 0; white-space: pre; }
+pre .kw { color: var(--kw); font-weight: 600; }
+pre .str { color: var(--str); }
+.review { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.review button { font: 500 12.5px/1 var(--font-sans); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: transparent; color: var(--fg-muted); cursor: pointer; }
+.review button[aria-pressed="true"][data-v="ok"] { background: var(--ok-bg); color: var(--ok-fg); border-color: transparent; }
+.review button[aria-pressed="true"][data-v="chg"] { background: var(--warn-bg); color: var(--warn-fg); border-color: transparent; }
+.review textarea { display: none; flex-basis: 100%; font: 14px/1.4 var(--font-sans); color: var(--fg); background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 8px; resize: vertical; }
+.card.rev-chg .review textarea { display: block; }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg-elev); border-top: 1px solid var(--border); padding: 10px 24px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.bar .sum { font: 500 13px var(--font-mono); color: var(--fg-subtle); }
+.bar button { font: 600 13px/1 var(--font-sans); padding: 9px 14px; border-radius: var(--radius-sm); border: 0; background: var(--accent); color: var(--white); cursor: pointer; }
+.bar textarea { flex-basis: 100%; display: none; height: 120px; font: 12.5px/1.4 var(--font-mono); }
+.hidden { display: none; }
+@media (max-width: 640px) {
+  main { padding: 24px 16px 140px; } .strip, .bar { padding-left: 16px; padding-right: 16px; }
+  .chips, .meta, .body, .review { margin-left: 0; }
+}
+</style></head>
+<body>
+<div class="strip"><span><b>ticket-board</b></span><span>__COUNT__ tickets</span></div>
+<main>
+<h1>__TITLE__</h1>
+<p class="sub">__SUB__</p>
+<div class="filters" id="filters"></div>
+<div id="sections">
+__SECTIONS__
+</div>
+</main>
+<div class="bar"><span class="sum" id="sum"></span><button type="button" id="copy">Copy review for chat</button><textarea id="fallback" readonly></textarea></div>
+<script>
+(function () {
+  var KEY = "__KEY__";
+  var rev = {};
+  try { rev = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { rev = {}; }
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(rev)); } catch (e) {} }
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".card"));
+  var filt = { phase: null, state: null, area: null, review: null };
+
+  function uniq(attr) {
+    var seen = [];
+    cards.forEach(function (c) { var v = c.dataset[attr]; if (v && seen.indexOf(v) < 0) seen.push(v); });
+    return seen;
+  }
+  function reviewOf(c) { return (rev[c.dataset.n] || {}).v || ""; }
+
+  var rows = [["phase", "Phase", uniq("phase")], ["state", "State", uniq("state")], ["area", "Area", uniq("area")],
+              ["review", "Review", ["ok", "chg", "none"]]];
+  var names = { ok: "Looks good", chg: "Needs change", none: "Not reviewed" };
+  var fbox = document.getElementById("filters");
+  rows.forEach(function (r) {
+    if (r[2].length < 2 && r[0] !== "review") return;
+    var row = document.createElement("div"); row.className = "frow";
+    row.innerHTML = "<span>" + r[1] + "</span>";
+    [null].concat(r[2]).forEach(function (v) {
+      var b = document.createElement("button"); b.type = "button"; b.className = "chip";
+      b.textContent = v === null ? "All" : (names[v] && r[0] === "review" ? names[v] : v);
+      b.addEventListener("click", function () { filt[r[0]] = v; apply(); });
+      b._key = r[0]; b._v = v; row.appendChild(b);
+    });
+    fbox.appendChild(row);
+  });
+
+  function apply() {
+    fbox.querySelectorAll(".chip").forEach(function (b) { b.setAttribute("aria-pressed", String(filt[b._key] === b._v)); });
+    cards.forEach(function (c) {
+      var rv = reviewOf(c) || "none";
+      var show = (!filt.phase || c.dataset.phase === filt.phase) && (!filt.state || c.dataset.state === filt.state) &&
+                 (!filt.area || c.dataset.area === filt.area) && (!filt.review || rv === filt.review);
+      c.classList.toggle("hidden", !show);
+      c.classList.toggle("rev-ok", rv === "ok"); c.classList.toggle("rev-chg", rv === "chg");
+      c.querySelectorAll(".review button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.v === rv)); });
+    });
+    document.querySelectorAll("section.phase").forEach(function (s) {
+      s.classList.toggle("hidden", !s.querySelector(".card:not(.hidden)"));
+    });
+    var ok = cards.filter(function (c) { return reviewOf(c) === "ok"; }).length;
+    var chg = cards.filter(function (c) { return reviewOf(c) === "chg"; }).length;
+    document.getElementById("sum").textContent = ok + " good, " + chg + " to change, " + (cards.length - ok - chg) + " not reviewed";
+  }
+
+  cards.forEach(function (c) {
+    var n = c.dataset.n, ta = c.querySelector("textarea");
+    ta.value = (rev[n] || {}).note || "";
+    c.querySelectorAll(".review button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var cur = reviewOf(c);
+        rev[n] = { v: cur === b.dataset.v ? "" : b.dataset.v, note: ta.value };
+        persist(); apply();
+        if (rev[n].v === "chg") ta.focus();
+      });
+    });
+    ta.addEventListener("input", function () { rev[n] = { v: reviewOf(c), note: ta.value }; persist(); });
+  });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var lines = ["Review of the ticket board \"" + document.title + "\"", ""];
+    cards.forEach(function (c) {
+      var r = rev[c.dataset.n] || {}, title = c.querySelector("h3").textContent;
+      if (r.v === "chg") lines.push("#" + c.dataset.n + " " + title + ": CHANGE. " + (r.note || "(no note)"));
+    });
+    var ok = cards.filter(function (c) { return reviewOf(c) === "ok"; }).map(function (c) { return "#" + c.dataset.n; });
+    var none = cards.filter(function (c) { return !reviewOf(c); }).map(function (c) { return "#" + c.dataset.n; });
+    if (ok.length) lines.push("Looks good: " + ok.join(", "));
+    if (none.length) lines.push("Not reviewed: " + none.join(", "));
+    var text = lines.join("\n"), btn = this, fb = document.getElementById("fallback");
+    function fallback() { fb.style.display = "block"; fb.value = text; fb.select(); btn.textContent = "Select all and copy"; }
+    try {
+      navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy review for chat"; }, 1500); }, fallback);
+    } catch (e) { fallback(); }
+  });
+  apply();
+})();
+</script>
+</body></html>

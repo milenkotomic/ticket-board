@@ -1,0 +1,6 @@
+- Only tickets 2 and 4 change in tickets.json, and only their acceptance criteria
+- `board.py plan` runs before `board.py sync`
+- The plan reports exactly 2 tickets to update
+- No `gh issue edit`, `gh issue view` or per-issue `gh api` call runs
+- The sync finishes without errors, and a second `plan` reports nothing to push
+- The page is re-rendered after the sync

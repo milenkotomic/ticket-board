@@ -1,0 +1,6 @@
+name: update-after-rewrite
+description: >
+  A board is already published. The user rewrites acceptance criteria of two
+  tickets and asks to update GitHub. The run must edit only tickets.json, use
+  plan and sync, and never edit issues one by one. Needs a scratch GitHub repo
+  and a board published to it with tests/bench_sync.py --keep.

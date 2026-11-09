@@ -165,16 +165,25 @@ def local_hash(t):
 
 # ---------------------------------------------------------------- GitHub GraphQL
 
+class ServerError(Exception):
+    """GitHub answered 5xx or the request died; the mutation may or may not have applied."""
+
+
 class GH:
     def __init__(self):
         self.requests = 0
 
-    def q(self, query, variables=None, allow_partial=False):
+    def q(self, query, variables=None, allow_partial=False, raise_server=False):
         payload = json.dumps({"query": query, "variables": variables or {}})
         for attempt in range(3):
             self.requests += 1
+            t0 = time.time()
             p = subprocess.run(["gh", "api", "graphql", "--input", "-"], input=payload,
                                capture_output=True, text=True)
+            if os.environ.get("TB_DEBUG"):
+                kind = "mutation" if query.lstrip().startswith("mutation") else "query"
+                print(f"  [{kind} {query.count('(input:')} ops, {time.time() - t0:.1f}s, rc={p.returncode}]"
+                      + (" " + p.stderr.strip()[:80] if p.returncode else ""), file=sys.stderr)
             try:
                 out = json.loads(p.stdout) if p.stdout.strip() else {}
             except json.JSONDecodeError:
@@ -187,6 +196,8 @@ class GH:
                 time.sleep(wait)
                 continue
             if p.returncode != 0 and not out.get("data"):
+                if raise_server and re.search(r"HTTP 5\d\d|timeout|timed out|EOF|connection", p.stderr or "", re.I):
+                    raise ServerError(p.stderr.strip()[:300])
                 die("gh api graphql failed: " + (p.stderr.strip() or json.dumps(errors))[:800])
             if errors and not allow_partial:
                 die("GitHub returned errors: " + json.dumps(errors)[:800])
@@ -260,7 +271,7 @@ def make_plan(board, repo, project, issues, force=()):
     by_n = {t["n"]: t for t in board["tickets"]}
     plan: dict[str, Any] = {"create": [], "update": [], "same": [], "unchanged": [], "remote_edited": [],
             "conflict": [], "missing": [], "add_item": [], "edges_add": [], "edges_remove": [],
-            "parent_set": [], "parent_remove": [], "status": []}
+            "parent_set": [], "parent_remove": [], "status": [], "fields": []}
     for t in board["tickets"]:
         n = t["n"]
         if not t.get("issue"):
@@ -277,7 +288,8 @@ def make_plan(board, repo, project, issues, force=()):
         lh, sh = local_hash(t), (t.get("synced") or {}).get("hash")
         if lh == r["hash"]:
             plan["same" if lh != sh else "unchanged"].append(n)
-        elif r["hash"] == sh:
+        elif r["hash"] == sh or not sh:
+            # No synced hash: created by a sync that did not finish, so nobody edited it since.
             plan["update"].append(n)
         elif n in force:
             plan["update"].append(n)
@@ -287,6 +299,8 @@ def make_plan(board, repo, project, issues, force=()):
             plan["conflict"].append(n)
         if pid and not item_in(issue, pid):
             plan["add_item"].append(n)
+        elif (r["phase"] or "") != (t.get("phase") or "") or (r["area"] or "") != (t.get("area") or "").strip():
+            plan["fields"].append(n)
         if r["status"] and r["status"] != t.get("state"):
             plan["status"].append((n, r["status"]))
     # Dependency edges and parents, only between issues that exist (or will after creation).
@@ -337,13 +351,15 @@ def print_plan(board, plan, project):
         print(f"- ticket #{n} changed locally AND on GitHub: run `diff`, merge into tickets.json, then --force {n}")
     for n in plan["missing"]:
         print(f"- ticket #{n}: issue {board_issue(plan, n)} not found (deleted or transferred?). Clear its 'issue' to recreate it")
+    if plan["fields"]:
+        print(f"- phase or area to set on {lst(plan['fields'])}")
     if plan["edges_add"] or plan["edges_remove"]:
         print(f"- blocked-by links: {len(plan['edges_add'])} to add, {len(plan['edges_remove'])} to remove")
     if plan["parent_set"] or plan["parent_remove"]:
         print(f"- sub-issue links: {len(plan['parent_set'])} to set, {len(plan['parent_remove'])} to remove")
     if plan["status"]:
         print("- status from GitHub: " + ", ".join(f"#{n} {s}" for n, s in plan["status"]))
-    if not any(plan[k] for k in ("create", "update", "edges_add", "edges_remove", "parent_set",
+    if not any(plan[k] for k in ("create", "update", "fields", "edges_add", "edges_remove", "parent_set",
                                   "parent_remove", "add_item")) and project:
         print("nothing to push")
 
@@ -355,16 +371,58 @@ def board_issue(plan, n):
 
 # ---------------------------------------------------------------- apply
 
-def batched(gh, ops, chunk=CHUNK):
-    """ops: list of (alias, mutation_text). Returns {alias: result} and a list of error strings."""
+def batched(gh, ops, chunk=CHUNK, retry=True):
+    """ops: list of (alias, mutation_text). Returns {alias: result} and a list of error strings.
+
+    On a 5xx the chunk is retried in halves (twice at most per op), which is safe for
+    updates, field values and links. With retry=False (issue creation) a 5xx is
+    reported as unknown instead, and the caller reconciles against GitHub.
+    """
     results, errs = {}, []
-    for i in range(0, len(ops), chunk):
-        part = ops[i:i + chunk]
+    queue = [(ops[i:i + chunk], 0) for i in range(0, len(ops), chunk)]
+    while queue:
+        part, tries = queue.pop(0)
         query = "mutation {\n" + "\n".join(f"  {a}: {m}" for a, m in part) + "\n}"
-        data, errors = gh.q(query, allow_partial=True)
+        try:
+            data, errors = gh.q(query, allow_partial=True, raise_server=True)
+        except ServerError as e:
+            if not retry or tries >= 2:
+                errs.append(f"server error on {', '.join(a for a, _ in part)}: {e}")
+                continue
+            time.sleep(2 * (tries + 1))
+            half = max(1, len(part) // 2)
+            queue[:0] = [(part[:half], tries + 1)] + ([(part[half:], tries + 1)] if part[half:] else [])
+            continue
         results.update({k: v for k, v in (data or {}).items() if v is not None})
-        errs += [e.get("message", str(e)) for e in errors]
+        for e in errors:
+            msg = e.get("message", str(e))
+            if re.search(r"already been taken|already exists|already a sub-issue", msg, re.I):
+                path = e.get("path") or []
+                if path:
+                    results.setdefault(path[0], {})
+                continue
+            errs.append(msg)
     return results, errs
+
+
+def adopt_created(gh, board, by_n, ns):
+    """After a failed create request, find issues GitHub created anyway (same title and body)."""
+    owner, name = board["github"]["repo"].split("/")
+    data, _ = gh.q("""query($o: String!, $n: String!) { repository(owner: $o, name: $n) {
+        issues(last: 100, orderBy: {field: CREATED_AT, direction: ASC}) { nodes { id number url title body } } } }""",
+                   {"o": owner, "n": name})
+    taken = {t.get("issue") for t in board["tickets"]}
+    found = {}
+    for n in ns:
+        t = by_n[n]
+        for i in reversed(data["repository"]["issues"]["nodes"]):
+            if i["number"] not in taken and i["title"] == t["title"] and norm(i["body"]) == issue_body(t):
+                found[f"c{n}"] = {"issue": i}
+                taken.add(i["number"])
+                break
+    if found:
+        print(f"  recovered {len(found)} issues created during a failed request")
+    return found
 
 
 def s(v):
@@ -415,8 +473,11 @@ def apply(gh, path, board, repo, project, issues, plan):
     if plan["create"]:
         ops = [(f"c{n}", f'createIssue(input: {{repositoryId: "{repo["id"]}", title: {s(by_n[n]["title"])}, body: {s(issue_body(by_n[n]))}}}) {{ issue {{ id number url }} }}')
                for n in plan["create"]]
-        res, errs = batched(gh, ops, CREATE_CHUNK)
+        res, errs = batched(gh, ops, CREATE_CHUNK, retry=False)
         errors += errs
+        lost = [n for n in plan["create"] if f"c{n}" not in res]
+        if lost:
+            res.update(adopt_created(gh, board, by_n, lost))
         for n in plan["create"]:
             r = res.get(f"c{n}")
             if r:
@@ -449,7 +510,9 @@ def apply(gh, path, board, repo, project, issues, plan):
     ops = []
     pf, af = fields.get("Phase"), fields.get("Area")
     phase_opt = {o["name"]: o["id"] for o in (pf or {}).get("options", [])}
-    write_fields = set(plan["create"]) | set(plan["update"]) | set(plan["add_item"])
+    # Phase and Area are written only where they differ from GitHub, so a description
+    # rewrite costs one updateIssue per ticket.
+    write_fields = set(plan["create"]) | set(plan["add_item"]) | set(plan["fields"])
     for n in plan["update"]:
         t = by_n[n]
         ops.append((f"u{n}", f'updateIssue(input: {{id: "{iid(n)}", title: {s(t["title"])}, body: {s(issue_body(t))}}}) {{ clientMutationId }}'))

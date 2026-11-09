@@ -22,8 +22,27 @@ Commands: `check`, `render`, `plan`, `sync`, `diff N`. Run it with `-h` for flag
 |---|---|---|
 | Board file | `<spec dir>/<spec name>.tickets.json`; from a chat plan, `docs/tickets/<slug>.tickets.json` in the repo | the user names a path |
 | Review page | `<board file without .json>.html`, opened with `open` | the user asks for a shareable page: publish that HTML with the Artifact tool |
-| Language of tickets | the language of the spec or the user's messages | the user asks |
+| Language of tickets | English or Spanish, picked as in "Language" below and stored in `language` | the user asks for the other one |
 | Publish target | GitHub repo in `github.repo`; ask for it on first publish | other trackers are not supported yet: stop after the review page and say so |
+
+## Language
+
+Tickets are written in English (`en`) or Spanish (`es-CL`). Decide once per
+board, in this order, and store the result in the board's `language` field:
+
+1. What the user asks for ("in English", "en español").
+2. The board's existing `language`, so revisions stay consistent.
+3. The language of the spec or the plan in chat.
+4. The language of the user's messages.
+
+When 3 and 4 differ, follow the spec and say so in one line of the reply,
+offering the other language. Spanish means Chilean or neutral Spanish: tú or
+impersonal forms, never voseo or rioplatense words. In Spanish, Gherkin uses
+the Spanish keywords (Característica, Escenario, Dado, Cuando, Entonces, Y).
+Code identifiers, field names and quoted UI strings stay as they are in the
+spec. Chat replies follow the user's language, whatever the tickets use.
+Switching an existing board's language means rewriting every ticket and, if it
+is published, a sync that updates all of them; confirm before doing it.
 
 ## Pick the mode
 
@@ -39,7 +58,7 @@ Commands: `check`, `render`, `plan`, `sync`, `diff N`. Run it with `-h` for flag
 2. If scope is unclear, ask at most three questions in one message (what is
    out of scope, phases or milestones, which repo the issues go to). Do not ask
    what the spec already answers.
-3. Write the board file. Content fields only; leave `issue`, `synced`, `state`
+3. Write the board file, with `language` set. Content fields only; leave `issue`, `synced`, `state`
    and `github.project` out.
 4. `board.py check`, fix anything it reports, then `board.py render` and open
    the page. Tell the user how many tickets, which can start first, and that

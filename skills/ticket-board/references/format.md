@@ -7,6 +7,7 @@ the bookkeeping fields and rewrites them on every sync.
 {
   "title": "Login rate limiting",
   "spec": "docs/specs/rate-limit.md",
+  "language": "en",
   "phases": ["Phase 1", "Phase 2"],
   "github": { "repo": "owner/name" },
   "tickets": [
@@ -33,6 +34,7 @@ the bookkeeping fields and rewrites them on every sync.
 |---|---|---|
 | `title` (board) | yes | Also the GitHub Project's title on first sync. |
 | `spec` | no | Path or URL of the source spec, shown on the page. |
+| `language` | yes for new boards | `en` or `es-CL`: the language every ticket is written in. Also the page's `lang`. |
 | `phases` | no | Display and Project order. Phases used by tickets but missing here are appended. |
 | `github.repo` | to sync | `owner/name`. Issues go to this repo; the Project belongs to its owner. |
 | `n` | yes | Stable ticket number, unique, never reused. Not the issue number. |

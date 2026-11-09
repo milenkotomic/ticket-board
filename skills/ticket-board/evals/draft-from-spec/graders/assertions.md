@@ -4,6 +4,8 @@
 - At least two tickets have no blockers, so work can start in parallel
 - Every acceptance criterion names an observable result (a status code, an ordering, a page size, a visible change)
 - Nothing from the spec's out-of-scope list becomes a ticket
-- Ticket text is in Spanish, matching the user, and uses no voseo
+- The spec is in English and the user did not ask for a language, so tickets are in English and `language` is `en`
+- The reply mentions that the tickets follow the spec's language and offers Spanish
+- The reply itself is in Spanish, matching the user, with no voseo
 - The review page is rendered with `board.py render`
 - No `gh` command runs and nothing is created on GitHub

@@ -117,6 +117,8 @@ def validate(board):
     for n in ns:
         if not state.get(n):
             visit(n, [])
+    if board.get("language") not in (None, "en", "es-CL", "es"):
+        errs.append("language must be 'en' or 'es-CL'")
     gh = board.get("github") or {}
     if gh.get("repo") and not re.fullmatch(r"[\w.-]+/[\w.-]+", gh["repo"]):
         errs.append("github.repo must look like owner/name")
@@ -674,7 +676,9 @@ def render(path, out):
         sub.append(f'<a href="{gh["project"]["url"]}" target="_blank" rel="noopener">GitHub Project</a>')
     if gh.get("synced_at"):
         sub.append(f"Synced {html.escape(gh['synced_at'].replace('T', ' ').rstrip('Z'))} UTC")
-    page = (tpl.replace("__TITLE__", html.escape(board["title"]))
+    lang = board.get("language") if board.get("language") in ("en", "es-CL", "es") else "en"
+    page = (tpl.replace("__LANG__", lang)
+               .replace("__TITLE__", html.escape(board["title"]))
                .replace("__SUB__", " · ".join(sub))
                .replace("__SECTIONS__", "\n".join(sections))
                .replace("__KEY__", "ticket-board:" + slug(board["title"]))

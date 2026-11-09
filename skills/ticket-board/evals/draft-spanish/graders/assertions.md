@@ -1,0 +1,7 @@
+- `language` in the board file is `es-CL` and `board.py check` passes
+- Every ticket title, summary and acceptance criterion is in Spanish
+- No voseo or rioplatense forms anywhere (no "vos", "tenés", "podés", "che")
+- Code identifiers such as `body` and `content` are kept as written in the spec
+- Any Gherkin uses Spanish keywords (Escenario, Dado, Cuando, Entonces)
+- The review page has `lang="es-CL"`
+- No `gh` command runs

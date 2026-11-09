@@ -1,0 +1,5 @@
+name: draft-spanish
+description: >
+  Same English spec, but the user asks for the tickets in Spanish. Tickets,
+  acceptance criteria and any Gherkin must be in Chilean or neutral Spanish,
+  with code identifiers kept as they are, and the board records es-CL.

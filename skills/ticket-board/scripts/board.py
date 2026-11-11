@@ -243,7 +243,7 @@ def read_remote(gh, board):
     owner, name = board["github"]["repo"].split("/")
     proj = (board["github"].get("project") or {}).get("id")
     nums = sorted({t["issue"] for t in board["tickets"] if t.get("issue")})
-    parts = [f"repo: repository(owner: $owner, name: $name) {{ id owner {{ id login }}"]
+    parts = [f"repo: repository(owner: $owner, name: $name) {{ id nameWithOwner viewerPermission owner {{ id login }}"]
     parts += [f"  i{n}: issue(number: {n}) {{ {ISSUE_FIELDS} }}" for n in nums]
     parts.append("}")
     variables = {"owner": owner, "name": name}
@@ -259,6 +259,21 @@ def read_remote(gh, board):
         die(f"cannot read repository {board['github']['repo']}: " + json.dumps(errors)[:400])
     issues = {n: repo.get(f"i{n}") for n in nums}
     return repo, data.get("project"), issues
+
+
+WRITE_PERMISSIONS = {"WRITE", "MAINTAIN", "ADMIN"}
+
+
+def can_write(repo):
+    """Anyone can open issues on a public repo, so a planted tickets.json could point sync
+    at a stranger's repo. Only a repo the user can push to is a valid target."""
+    return repo.get("viewerPermission") in WRITE_PERMISSIONS
+
+
+def require_write(repo):
+    if not can_write(repo):
+        die(f"you have {repo.get('viewerPermission') or 'no'} access to {repo.get('nameWithOwner')}, not write: "
+            "refusing to sync. Check github.repo in tickets.json; sync only targets repos you can push to")
 
 
 def field_map(project):
@@ -367,7 +382,7 @@ def make_plan(board, repo, project, issues, force=()):
     return plan
 
 
-def print_plan(board, plan, project):
+def print_plan(board, plan, project, repo=None):
     def lst(ns):
         return ", ".join(f"#{n}" for n in ns)
     total = len(board["tickets"])
@@ -382,6 +397,9 @@ def print_plan(board, plan, project):
     # The target comes from GitHub's answer, not from the file, so a swapped id shows up here.
     where = f"project '{project.get('title')}' {project.get('url')}" if project else "no project yet"
     print(f"target: {board['github']['repo']}, {where}")
+    if repo is not None and not can_write(repo):
+        print(f"- WARNING: you have {repo.get('viewerPermission') or 'no'} access to {repo.get('nameWithOwner')}, "
+              "not write; sync will refuse. Check github.repo in tickets.json")
     for n in plan["foreign"]:
         print(f"- ticket #{n}: issue {board_issue(plan, n)} has no sync record and no ticket-board footer, so this "
               f"board did not create it; left untouched. Fix its 'issue' number, or pass --force {n} to take it over")
@@ -763,7 +781,7 @@ def cmd_plan(path, force=()):
     gh = GH()
     repo, project, issues = read_remote(gh, board)
     plan = make_plan(board, repo, project, issues, force)
-    print_plan(board, plan, project)
+    print_plan(board, plan, project, repo)
     print(f"(read in {gh.requests} request, {time.time() - t0:.1f}s)")
     return board, gh, repo, project, issues, plan
 
@@ -774,10 +792,11 @@ def cmd_sync(path, force, yes_create):
     t0 = time.time()
     gh = GH()
     repo, project, issues = read_remote(gh, board)
+    require_write(repo)
     if not project and not yes_create:
         die("no GitHub Project yet: run plan, confirm with the user, then sync --yes-create-project")
     plan = make_plan(board, repo, project, issues, force)
-    print_plan(board, plan, project)
+    print_plan(board, plan, project, repo)
     errors, nops = apply(gh, path, board, repo, project, issues, plan)
     print(f"done in {time.time() - t0:.1f}s, {gh.requests} GitHub requests")
     if errors:

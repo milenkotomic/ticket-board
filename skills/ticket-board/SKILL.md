@@ -80,6 +80,8 @@ is published, a sync that updates all of them; confirm before doing it.
 1. `board.py plan` first. It reads GitHub in one request and prints what would
    change. Show the user that plan, including its `target:` line. If the repo
    or Project on that line is not the one the user named, stop and ask.
+   A `WARNING` line means the user cannot push to that repo; sync refuses it,
+   so fix `github.repo` with the user rather than looking for a workaround.
 2. First publish (no project yet), or any plan that creates issues: creating
    issues and a Project is outward-facing, so get the user's go-ahead, then run
    `board.py sync --yes-create-project` (the flag is only needed when the

@@ -1,6 +1,6 @@
 {
   "name": "ticket-board",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Slice a spec into reviewable tickets, review them on a styled HTML board, and publish and sync them as GitHub issues on a GitHub Project in a few batched requests.",
   "author": {
     "name": "Milenko Tomic",

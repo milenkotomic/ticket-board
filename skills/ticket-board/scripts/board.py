@@ -120,8 +120,25 @@ def validate(board):
     if board.get("language") not in (None, "en", "es-CL", "es"):
         errs.append("language must be 'en' or 'es-CL'")
     gh = board.get("github") or {}
-    if gh.get("repo") and not re.fullmatch(r"[\w.-]+/[\w.-]+", gh["repo"]):
+    if not isinstance(gh, dict):
+        return errs + ["'github' must be an object"]
+    if gh.get("repo") and not (isinstance(gh["repo"], str) and re.fullmatch(r"[\w.-]+/[\w.-]+", gh["repo"])):
         errs.append("github.repo must look like owner/name")
+    # Bookkeeping fields end up in GraphQL requests and in the page, so they are checked too.
+    for n, t in ns.items():
+        i = t.get("issue")
+        if i is not None and (not isinstance(i, int) or isinstance(i, bool) or i < 1):
+            errs.append(f"ticket {n}: 'issue' must be a positive integer")
+    proj = gh.get("project")
+    if proj is not None:
+        if not isinstance(proj, dict):
+            errs.append("github.project must be an object")
+        else:
+            if proj.get("id") and not (isinstance(proj["id"], str) and re.fullmatch(r"[A-Za-z0-9_=-]+", proj["id"])):
+                errs.append("github.project.id is not a GitHub node id")
+            if proj.get("url") and not (isinstance(proj["url"], str)
+                                        and re.fullmatch(r"https://github\.com/[\w./-]+", proj["url"])):
+                errs.append("github.project.url must be an https://github.com/ URL")
     return errs
 
 
@@ -229,10 +246,14 @@ def read_remote(gh, board):
     parts = [f"repo: repository(owner: $owner, name: $name) {{ id owner {{ id login }}"]
     parts += [f"  i{n}: issue(number: {n}) {{ {ISSUE_FIELDS} }}" for n in nums]
     parts.append("}")
+    variables = {"owner": owner, "name": name}
+    decl = "$owner: String!, $name: String!"
     if proj:
-        parts.append(f'project: node(id: "{proj}") {{ ... on ProjectV2 {{ {PROJECT_FIELDS} }} }}')
-    query = "query($owner: String!, $name: String!) {\n" + "\n".join(parts) + "\n}"
-    data, errors = gh.q(query, {"owner": owner, "name": name}, allow_partial=True)
+        parts.append(f"project: node(id: $proj) {{ ... on ProjectV2 {{ {PROJECT_FIELDS} }} }}")
+        variables["proj"] = proj
+        decl += ", $proj: ID!"
+    query = f"query({decl}) {{\n" + "\n".join(parts) + "\n}"
+    data, errors = gh.q(query, variables, allow_partial=True)
     repo = data.get("repo")
     if not repo:
         die(f"cannot read repository {board['github']['repo']}: " + json.dumps(errors)[:400])
@@ -268,11 +289,16 @@ def remote_view(issue, project_id):
 
 # ---------------------------------------------------------------- plan
 
+def managed(issue):
+    """True when the issue body carries the footer every ticket-board issue ends with."""
+    return norm((issue or {}).get("body")).endswith(MARK)
+
+
 def make_plan(board, repo, project, issues, force=()):
     pid = (project or {}).get("id")
     by_n = {t["n"]: t for t in board["tickets"]}
     plan: dict[str, Any] = {"create": [], "update": [], "same": [], "unchanged": [], "remote_edited": [],
-            "conflict": [], "missing": [], "add_item": [], "edges_add": [], "edges_remove": [],
+            "conflict": [], "missing": [], "foreign": [], "add_item": [], "edges_add": [], "edges_remove": [],
             "parent_set": [], "parent_remove": [], "status": [], "fields": []}
     for t in board["tickets"]:
         n = t["n"]
@@ -290,11 +316,16 @@ def make_plan(board, repo, project, issues, force=()):
         lh, sh = local_hash(t), (t.get("synced") or {}).get("hash")
         if lh == r["hash"]:
             plan["same" if lh != sh else "unchanged"].append(n)
-        elif r["hash"] == sh or not sh:
-            # No synced hash: created by a sync that did not finish, so nobody edited it since.
+        elif r["hash"] == sh or n in force:
             plan["update"].append(n)
-        elif n in force:
+        elif not sh and managed(issue):
+            # No synced hash but our footer: created by a sync that did not finish.
             plan["update"].append(n)
+        elif not sh:
+            # No sync record and no footer: this board did not create the issue, so
+            # nothing about it is touched (content, project, links) unless forced.
+            plan["foreign"].append(n)
+            continue
         elif lh == sh:
             plan["remote_edited"].append(n)
         else:
@@ -307,13 +338,17 @@ def make_plan(board, repo, project, issues, force=()):
             plan["status"].append((n, r["status"]))
     # Dependency edges and parents, only between issues that exist (or will after creation).
     issue_to_n = {t["issue"]: t["n"] for t in board["tickets"] if t.get("issue")}
+    foreign = set(plan["foreign"])
     for t in board["tickets"]:
         n = t["n"]
+        if n in foreign:
+            continue
         issue = issues.get(t.get("issue")) if t.get("issue") else None
-        want = set(t.get("blocked_by") or [])
+        want = set(t.get("blocked_by") or []) - foreign
         have = set()
         if issue:
             have = {issue_to_n[x["number"]] for x in issue["blockedBy"]["nodes"] if x and x["number"] in issue_to_n}
+            have -= foreign
         for b in sorted(want - have):
             plan["edges_add"].append((n, b))
         for b in sorted(have - want):
@@ -322,6 +357,8 @@ def make_plan(board, repo, project, issues, force=()):
         have_p = None
         if issue and issue.get("parent") and issue["parent"]["number"] in issue_to_n:
             have_p = issue_to_n[issue["parent"]["number"]]
+        if want_p in foreign or have_p in foreign:
+            continue
         if want_p and want_p != have_p:
             plan["parent_set"].append((n, want_p))
         elif not want_p and have_p:
@@ -337,10 +374,17 @@ def print_plan(board, plan, project):
     head = []
     for key, label in (("unchanged", "unchanged"), ("same", "already match"), ("update", "to update"),
                        ("create", "to create"), ("remote_edited", "edited on GitHub"),
-                       ("conflict", "edited on both sides"), ("missing", "issue not found")):
+                       ("conflict", "edited on both sides"), ("missing", "issue not found"),
+                       ("foreign", "not created by this board")):
         if plan[key]:
             head.append(f"{len(plan[key])} {label}")
     print(f"{total} tickets: " + ", ".join(head))
+    # The target comes from GitHub's answer, not from the file, so a swapped id shows up here.
+    where = f"project '{project.get('title')}' {project.get('url')}" if project else "no project yet"
+    print(f"target: {board['github']['repo']}, {where}")
+    for n in plan["foreign"]:
+        print(f"- ticket #{n}: issue {board_issue(plan, n)} has no sync record and no ticket-board footer, so this "
+              f"board did not create it; left untouched. Fix its 'issue' number, or pass --force {n} to take it over")
     if not project:
         print(f"- create GitHub Project '{board['title']}' linked to {board['github']['repo']}")
     if plan["create"]:
@@ -460,7 +504,8 @@ def ensure_project(gh, board, repo, project):
             gh.q(f'mutation {{ updateProjectV2Field(input: {{fieldId: "{f["id"]}", singleSelectOptions: [{", ".join(opts)}]}}) {{ clientMutationId }} }}')
             print("  added phase options: " + ", ".join(new))
     pid = board["github"]["project"]["id"]
-    data, _ = gh.q(f'query {{ node(id: "{pid}") {{ ... on ProjectV2 {{ {PROJECT_FIELDS} }} }} }}')
+    data, _ = gh.q(f"query($proj: ID!) {{ node(id: $proj) {{ ... on ProjectV2 {{ {PROJECT_FIELDS} }} }} }}",
+                   {"proj": pid})
     return data["node"]
 
 
@@ -568,7 +613,8 @@ def apply(gh, path, board, repo, project, issues, plan):
 # ---------------------------------------------------------------- render
 
 def md_inline(t):
-    t = html.escape(t, quote=False)
+    # Quotes are escaped too: link URLs below land inside an href attribute.
+    t = html.escape(str(t))
     t = re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
     t = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", t)
     t = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?!\w)", r"<em>\1</em>", t)
@@ -640,7 +686,7 @@ def render(path, out):
             if t.get("area"):
                 chips.append(f'<span class="pill area">{html.escape(t["area"])}</span>')
             if t.get("issue") and repo_url:
-                chips.append(f'<a class="pill issue" href="{repo_url}/issues/{t["issue"]}" target="_blank" rel="noopener">#{t["issue"]}</a>')
+                chips.append(f'<a class="pill issue" href="{repo_url}/issues/{int(t["issue"])}" target="_blank" rel="noopener">#{int(t["issue"])}</a>')
             if ready and blockers:
                 chips.append('<span class="pill ready">ready</span>')
             meta = []
@@ -673,7 +719,7 @@ def render(path, out):
     if repo_url:
         sub.append(f'Repo: <a href="{repo_url}" target="_blank" rel="noopener">{html.escape(gh["repo"])}</a>')
     if (gh.get("project") or {}).get("url"):
-        sub.append(f'<a href="{gh["project"]["url"]}" target="_blank" rel="noopener">GitHub Project</a>')
+        sub.append(f'<a href="{html.escape(gh["project"]["url"])}" target="_blank" rel="noopener">GitHub Project</a>')
     if gh.get("synced_at"):
         sub.append(f"Synced {html.escape(gh['synced_at'].replace('T', ' ').rstrip('Z'))} UTC")
     lang = board.get("language") if board.get("language") in ("en", "es-CL", "es") else "en"

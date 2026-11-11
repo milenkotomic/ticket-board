@@ -68,3 +68,7 @@ with a short "managed by ticket-board" note. When someone edits the title or
 body on GitHub, sync reports the ticket as "edited on GitHub" and leaves it
 alone until the change is ported into tickets.json (see `board.py diff`) or
 overridden with `--force N`.
+
+That note is also how sync recognises its own issues. A ticket whose `issue`
+points at an issue with no sync record and no such note is reported as "not
+created by this board" and nothing about it is changed unless it is forced.
